@@ -224,7 +224,7 @@ func (b *BayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models
 	} else {
 		_, err = api.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID:           msg.Chat.ID,
-			Text:             "Похожих картинок не видел",
+			Text:             "Похожих постов не видел",
 			ReplyToMessageID: msg.ID,
 		})
 		if err != nil {
