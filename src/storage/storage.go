@@ -7,6 +7,7 @@ import (
 	"github.com/go-faster/errors"
 	"github.com/go-telegram/bot/models"
 	_ "github.com/mattn/go-sqlite3"
+	"sort"
 	"time"
 )
 
@@ -21,6 +22,11 @@ type Message struct {
 	SentDate time.Time
 	AHash    *goimagehash.ImageHash
 	DHash    *goimagehash.ImageHash
+}
+
+type SimilarMessage struct {
+	Msg      *Message
+	Distance int
 }
 
 func New(filepath string) (*Storage, error) {
@@ -90,7 +96,12 @@ func (s *Storage) SaveMessage(msg *models.Message, pHash *goimagehash.ImageHash,
 	return nil
 }
 
-func (s *Storage) FindMsgFilter(chatID int64, filter func(msg *Message) (bool, error)) ([]*Message, error) {
+// FindMsgFilter finds messages in the database and applies a filter to them.
+// The filter function should return the distance between the hashes, whether
+// the message is a match and an error if any.
+// The messages are sorted by distance in descending order.
+// If limit is 0, all matches are returned.
+func (s *Storage) FindMsgFilter(chatID int64, limit int, filter func(msg *Message) (dist int, ok bool, err error)) ([]*SimilarMessage, error) {
 	rows, err := s.db.Query(`
 		select
 			id,
@@ -101,6 +112,7 @@ func (s *Storage) FindMsgFilter(chatID int64, filter func(msg *Message) (bool, e
 			dHash
 		from messages
 		where chatId = :chatId
+		order by id desc;
 	`, sql.Named("chatId", chatID))
 	if err != nil {
 		return nil, errors.Wrap(err, "querying messages")
@@ -112,7 +124,7 @@ func (s *Storage) FindMsgFilter(chatID int64, filter func(msg *Message) (bool, e
 		}
 	}()
 
-	var messages []*Message
+	var messages []*SimilarMessage
 	for rows.Next() {
 		var msg Message
 		var pHashBytes, dHashBytes []byte
@@ -140,17 +152,28 @@ func (s *Storage) FindMsgFilter(chatID int64, filter func(msg *Message) (bool, e
 		msg.AHash = pHash
 		msg.DHash = dHash
 
-		ok, err := filter(&msg)
+		dist, ok, err := filter(&msg)
 		if err != nil {
 			return nil, errors.Wrap(err, "filtering message")
 		}
 
-		if !ok {
-			continue
+		var sMsg SimilarMessage
+		sMsg.Msg = &msg
+		sMsg.Distance = dist
+
+		if ok {
+			messages = append(messages, &sMsg)
 		}
 
-		messages = append(messages, &msg)
+		if limit != 0 && len(messages) >= limit {
+			break
+		}
 	}
+
+	// Sort descending
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Distance > messages[j].Distance
+	})
 
 	return messages, nil
 }
