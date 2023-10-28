@@ -64,6 +64,10 @@ func (b *BayanBot) processMessage(next bot.HandlerFunc) bot.HandlerFunc {
 			}
 		}
 
+		if update.Message.Story != nil {
+			// TODO: Add story processing when telegram bot api will support it
+		}
+
 		next(ctx, api, update)
 	}
 }
@@ -126,29 +130,34 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 		return errors.Wrap(err, "failed to hash pictures")
 	}
 
-	similar, err := b.store.FindMsgFilter(msg.Chat.ID, func(msg *storage.Message) (bool, error) {
-		distance, err := dHash.Distance(msg.DHash)
-		if err != nil {
-			return false, errors.Wrap(err, "failed to get distance")
-		}
+	// Will find the first match and stop
+	similar, err := b.store.FindMsgFilter(
+		msg.Chat.ID,
+		1,
+		func(msg *storage.Message) (dist int, ok bool, err error) {
+			dist, err = dHash.Distance(msg.DHash)
+			if err != nil {
+				return 0, false, errors.Wrap(err, "failed to get distance")
+			}
 
-		if distance < 10 {
-			b.logger.Info(
-				"found similar message",
-				zap.Int("distance", distance),
-				zap.Int("id", msg.ID),
-			)
-			return true, nil
-		}
+			if dist < 10 {
+				b.logger.Info(
+					"found similar message",
+					zap.Int("distance", dist),
+					zap.Int("id", msg.ID),
+				)
+				return dist, true, nil
+			}
 
-		return false, nil
-	})
+			return dist, false, nil
+		},
+	)
 	if err != nil {
 		return errors.Wrap(err, "failed to find similar messages")
 	}
 
 	if len(similar) > 0 {
-		err := b.replyBayan(ctx, api, msg, similar)
+		err := b.replyBayan(ctx, api, msg, similar[0])
 		if err != nil {
 			return errors.Wrap(err, "failed to reply bayan")
 		}
@@ -162,25 +171,124 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 	return nil
 }
 
-func (b *BayanBot) replyBayan(ctx context.Context, api *bot.Bot, msg *models.Message, similar []*storage.Message) error {
+func (b *BayanBot) replyBayan(ctx context.Context, api *bot.Bot, msg *models.Message, similar *storage.SimilarMessage) error {
+	chatID := similar.Msg.ChatID + 1000000000000
+	text := fmt.Sprintf("[Баян](https://t.me/c/%d/%d)\n", chatID, similar.Msg.ID)
+
 	_, err := api.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:           msg.Chat.ID,
-		Text:             "Баян",
+		Text:             text,
 		ReplyToMessageID: msg.ID,
+		ParseMode:        models.ParseModeMarkdown,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to send message")
 	}
 
-	explanation := "Похоже на:\n"
-	for _, similarMsg := range similar {
-		chatID := similarMsg.ChatID + 1000000000000
-		explanation += fmt.Sprintf("- https://t.me/c/%d/%d\n", chatID, similarMsg.ID)
+	return nil
+}
+
+func (b *BayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models.Message, pic models.PhotoSize) error {
+	_, dHash, err := b.hashPicture(ctx, api, pic)
+	if err != nil {
+		return errors.Wrap(err, "failed to hash pictures")
 	}
 
-	_, err = api.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: msg.Chat.ID,
-		Text:   explanation,
+	// Will find all similar messages
+	similar, err := b.store.FindMsgFilter(msg.Chat.ID, 0, func(msg *storage.Message) (dist int, ok bool, err error) {
+		dist, err = dHash.Distance(msg.DHash)
+		if err != nil {
+			return 0, false, errors.Wrap(err, "failed to get distance")
+		}
+
+		if dist < 15 {
+			b.logger.Info(
+				"found similar message",
+				zap.Int("distance", dist),
+				zap.Int("id", msg.ID),
+			)
+			return dist, true, nil
+		}
+
+		return dist, false, nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to find similar messages")
+	}
+
+	if len(similar) > 1 {
+		err := b.replySimilar(ctx, api, msg, similar)
+		if err != nil {
+			return errors.Wrap(err, "failed to reply bayan")
+		}
+	} else {
+		_, err = api.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID:           msg.Chat.ID,
+			Text:             "Похожих картинок не видел",
+			ReplyToMessageID: msg.ID,
+		})
+		if err != nil {
+			return errors.Wrap(err, "failed to send message")
+		}
+	}
+
+	return nil
+}
+
+func (b *BayanBot) compareCmd(ctx context.Context, api *bot.Bot, update *models.Update) {
+	if update.Message.ReplyToMessage == nil {
+		_, err := api.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID:           update.Message.Chat.ID,
+			Text:             "Ответь на картинку/видео, которую хотите сравнить",
+			ReplyToMessageID: update.Message.ID,
+		})
+		if err != nil {
+			b.logger.Error("failed to send message", zap.Error(err))
+		}
+		return
+	}
+
+	if update.Message.ReplyToMessage.Photo != nil {
+		err := b.comparePicture(ctx, api, update.Message, update.Message.ReplyToMessage.Photo[0])
+		if err != nil {
+			b.logger.Error("failed to process pictures", zap.Error(err))
+		}
+	}
+
+	if update.Message.ReplyToMessage.Video != nil {
+		err := b.comparePicture(ctx, api, update.Message, *update.Message.ReplyToMessage.Video.Thumbnail)
+		if err != nil {
+			b.logger.Error("failed to process video", zap.Error(err))
+		}
+	}
+
+	if update.Message.ReplyToMessage.Story != nil {
+		// TODO: Add story processing when telegram bot api will support it
+		_, err := api.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID:           update.Message.Chat.ID,
+			Text:             "Дуров не дает мне работать со сторисами",
+			ReplyToMessageID: update.Message.ID,
+		})
+		if err != nil {
+			b.logger.Error("failed to send message", zap.Error(err))
+		}
+	}
+}
+
+func (b *BayanBot) replySimilar(ctx context.Context, api *bot.Bot, msg *models.Message, similar []*storage.SimilarMessage) error {
+	text := "Что-то похожее:\n"
+	for _, s := range similar {
+		if s.Msg.ID == msg.ReplyToMessage.ID {
+			continue
+		}
+		chatID := s.Msg.ChatID + 1000000000000
+		text += fmt.Sprintf("- https://t.me/c/%d/%d\n", chatID, s.Msg.ID)
+	}
+
+	_, err := api.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:           msg.Chat.ID,
+		Text:             text,
+		ReplyToMessageID: msg.ID,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to send message")
@@ -215,6 +323,7 @@ func main() {
 	opts := []bot.Option{
 		bot.WithMiddlewares(bayanBot.processMessage),
 		bot.WithMessageTextHandler("/start", bot.MatchTypeExact, bayanBot.startCmd),
+		bot.WithMessageTextHandler("/compare", bot.MatchTypeExact, bayanBot.compareCmd),
 	}
 
 	b, err := bot.New(config.TelegramToken, opts...)
@@ -227,37 +336,3 @@ func main() {
 
 	b.Start(ctx)
 }
-
-//func main() {
-//	file1, err := os.Open("pic-v4.jpg")
-//	if err != nil {
-//		fmt.Println(err)
-//		return
-//	}
-//	file2, err := os.Open("pic-v5.jpg")
-//	if err != nil {
-//		fmt.Println(err)
-//		return
-//	}
-//	defer file1.Close()
-//	defer file2.Close()
-//
-//	img1, _ := jpeg.Decode(file1)
-//	img2, _ := jpeg.Decode(file2)
-//	hash1, _ := goimagehash.AverageHash(img1)
-//	hash2, _ := goimagehash.AverageHash(img2)
-//	distance, _ := hash1.Distance(hash2)
-//	fmt.Printf("Distance between images: %v\n", distance)
-//
-//	hash1, _ = goimagehash.DifferenceHash(img1)
-//	hash2, _ = goimagehash.DifferenceHash(img2)
-//	distance, _ = hash1.Distance(hash2)
-//	fmt.Printf("Distance between images: %v\n", distance)
-//	width, height := 8, 8
-//	hash3, _ := goimagehash.ExtAverageHash(img1, width, height)
-//	hash4, _ := goimagehash.ExtAverageHash(img2, width, height)
-//	distance, _ = hash3.Distance(hash4)
-//	fmt.Printf("Distance between images: %v\n", distance)
-//	fmt.Printf("hash3 bit size: %v\n", hash3.Bits())
-//	fmt.Printf("hash4 bit size: %v\n", hash4.Bits())
-//}
