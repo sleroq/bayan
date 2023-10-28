@@ -99,8 +99,9 @@ func (s *Storage) FindMsgFilter(filter func(msg *Message) (bool, error)) ([]*Mes
 			sentDate,
 			aHash,
 			dHash
-		from messages;
-	`)
+		from messages
+		where chatId = :chatId
+	`, sql.Named("chatId", chatID))
 	if err != nil {
 		return nil, errors.Wrap(err, "querying messages")
 	}

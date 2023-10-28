@@ -126,7 +126,7 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 		return errors.Wrap(err, "failed to hash pictures")
 	}
 
-	similar, err := b.store.FindMsgFilter(func(msg *storage.Message) (bool, error) {
+	similar, err := b.store.FindMsgFilter(msg.Chat.ID, func(msg *storage.Message) (bool, error) {
 		distance, err := dHash.Distance(msg.DHash)
 		if err != nil {
 			return false, errors.Wrap(err, "failed to get distance")
