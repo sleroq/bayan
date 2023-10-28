@@ -172,7 +172,7 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 }
 
 func (b *BayanBot) replyBayan(ctx context.Context, api *bot.Bot, msg *models.Message, similar *storage.SimilarMessage) error {
-	chatID := similar.Msg.ChatID + 1000000000000
+	chatID := (similar.Msg.ChatID + 1000000000000) * -1
 	text := fmt.Sprintf("[Баян](https://t.me/c/%d/%d)\n", chatID, similar.Msg.ID)
 
 	_, err := api.SendMessage(ctx, &bot.SendMessageParams{
