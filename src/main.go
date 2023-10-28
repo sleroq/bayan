@@ -174,7 +174,8 @@ func (b *BayanBot) replyBayan(ctx context.Context, api *bot.Bot, msg *models.Mes
 
 	explanation := "Похоже на:\n"
 	for _, similarMsg := range similar {
-		explanation += fmt.Sprintf("- https://t.me/c/%d/%d\n", similarMsg.ChatID, similarMsg.ID)
+		chatID := similarMsg.ChatID + 1000000000000
+		explanation += fmt.Sprintf("- https://t.me/c/%d/%d\n", chatID, similarMsg.ID)
 	}
 
 	_, err = api.SendMessage(ctx, &bot.SendMessageParams{
