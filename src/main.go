@@ -195,8 +195,12 @@ func (b *BayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models
 	}
 
 	// Will find all similar messages
-	similar, err := b.store.FindMsgFilter(msg.Chat.ID, 0, func(msg *storage.Message) (dist int, ok bool, err error) {
-		dist, err = dHash.Distance(msg.DHash)
+	similar, err := b.store.FindMsgFilter(msg.Chat.ID, 0, func(m *storage.Message) (dist int, ok bool, err error) {
+		if m.ID == msg.ReplyToMessage.ID {
+			return 0, false, nil
+		}
+
+		dist, err = dHash.Distance(m.DHash)
 		if err != nil {
 			return 0, false, errors.Wrap(err, "failed to get distance")
 		}
@@ -205,7 +209,7 @@ func (b *BayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models
 			b.logger.Info(
 				"found similar message",
 				zap.Int("distance", dist),
-				zap.Int("id", msg.ID),
+				zap.Int("id", m.ID),
 			)
 			return dist, true, nil
 		}
@@ -216,7 +220,7 @@ func (b *BayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models
 		return errors.Wrap(err, "failed to find similar messages")
 	}
 
-	if len(similar) > 1 {
+	if len(similar) > 0 {
 		err := b.replySimilar(ctx, api, msg, similar)
 		if err != nil {
 			return errors.Wrap(err, "failed to reply bayan")
@@ -278,9 +282,6 @@ func (b *BayanBot) compareCmd(ctx context.Context, api *bot.Bot, update *models.
 func (b *BayanBot) replySimilar(ctx context.Context, api *bot.Bot, msg *models.Message, similar []*storage.SimilarMessage) error {
 	text := "Что-то похожее:\n"
 	for _, s := range similar {
-		if s.Msg.ID == msg.ReplyToMessage.ID {
-			continue
-		}
 		chatID := s.Msg.ChatID + 1000000000000
 		text += fmt.Sprintf("- https://t.me/c/%d/%d\n", chatID, s.Msg.ID)
 	}
