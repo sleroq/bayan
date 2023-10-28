@@ -35,7 +35,7 @@ func New(filepath string) (*Storage, error) {
 			userId integer not null,
 			chatId integer not null,
 			sentDate timestamp not null,
-			aHash blob not null,
+			pHash blob not null,
 			dHash blob not null,
 			primary key (id, chatId)
 		);
@@ -66,21 +66,21 @@ func (s *Storage) SaveMessage(msg *models.Message, pHash *goimagehash.ImageHash,
 			userId,
 			chatId,
 			sentDate,
-			aHash,
+			pHash,
 			dHash
 		) values (
 			:id,
 			:userId,
 			:chatId,
 			:sentDate,
-			:aHash,
+			:pHash,
 			:dHash
 		);`,
 		sql.Named("id", msg.ID),
 		sql.Named("userId", msg.From.ID),
 		sql.Named("chatId", msg.Chat.ID),
 		sql.Named("sentDate", msg.Date),
-		sql.Named("aHash", pHashDump.Bytes()),
+		sql.Named("pHash", pHashDump.Bytes()),
 		sql.Named("dHash", dHashDump.Bytes()),
 	)
 	if err != nil {
@@ -90,14 +90,14 @@ func (s *Storage) SaveMessage(msg *models.Message, pHash *goimagehash.ImageHash,
 	return nil
 }
 
-func (s *Storage) FindMsgFilter(filter func(msg *Message) (bool, error)) ([]*Message, error) {
+func (s *Storage) FindMsgFilter(chatID int64, filter func(msg *Message) (bool, error)) ([]*Message, error) {
 	rows, err := s.db.Query(`
 		select
 			id,
 			userId,
 			chatId,
 			sentDate,
-			aHash,
+			pHash,
 			dHash
 		from messages
 		where chatId = :chatId
@@ -115,13 +115,13 @@ func (s *Storage) FindMsgFilter(filter func(msg *Message) (bool, error)) ([]*Mes
 	var messages []*Message
 	for rows.Next() {
 		var msg Message
-		var aHashBytes, dHashBytes []byte
+		var pHashBytes, dHashBytes []byte
 		err := rows.Scan(
 			&msg.ID,
 			&msg.UserID,
 			&msg.ChatID,
 			&msg.SentDate,
-			&aHashBytes,
+			&pHashBytes,
 			&dHashBytes,
 		)
 		if err != nil {
@@ -132,12 +132,12 @@ func (s *Storage) FindMsgFilter(filter func(msg *Message) (bool, error)) ([]*Mes
 		if err != nil {
 			return nil, errors.Wrap(err, "loading dHash")
 		}
-		aHash, err := goimagehash.LoadImageHash(bytes.NewReader(aHashBytes))
+		pHash, err := goimagehash.LoadImageHash(bytes.NewReader(pHashBytes))
 		if err != nil {
-			return nil, errors.Wrap(err, "loading aHash")
+			return nil, errors.Wrap(err, "loading pHash")
 		}
 
-		msg.AHash = aHash
+		msg.AHash = pHash
 		msg.DHash = dHash
 
 		ok, err := filter(&msg)
