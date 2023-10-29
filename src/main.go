@@ -44,32 +44,27 @@ func (b *BayanBot) startCmd(ctx context.Context, api *bot.Bot, update *models.Up
 	}
 }
 
-func (b *BayanBot) processMessage(next bot.HandlerFunc) bot.HandlerFunc {
-	return func(ctx context.Context, api *bot.Bot, update *models.Update) {
-		if update.Message == nil {
-			next(ctx, api, update)
-			return
-		}
+func (b *BayanBot) processMessage(ctx context.Context, api *bot.Bot, update *models.Update) {
+	if update.Message == nil {
+		return
+	}
 
-		if update.Message.Photo != nil {
-			err := b.processPicture(ctx, api, update.Message, update.Message.Photo[0])
-			if err != nil {
-				b.logger.Error("failed to process pictures", zap.Error(err))
-			}
+	if update.Message.Photo != nil {
+		err := b.processPicture(ctx, api, update.Message, update.Message.Photo[0])
+		if err != nil {
+			b.logger.Error("failed to process pictures", zap.Error(err))
 		}
+	}
 
-		if update.Message.Video != nil {
-			err := b.processVideo(ctx, api, update.Message)
-			if err != nil {
-				b.logger.Error("failed to process video", zap.Error(err))
-			}
+	if update.Message.Video != nil {
+		err := b.processVideo(ctx, api, update.Message)
+		if err != nil {
+			b.logger.Error("failed to process video", zap.Error(err))
 		}
+	}
 
-		if update.Message.Story != nil {
-			// TODO: Add story processing when telegram bot api will support it
-		}
-
-		next(ctx, api, update)
+	if update.Message.Story != nil {
+		// TODO: Add story processing when telegram bot api will support it
 	}
 }
 
@@ -142,7 +137,7 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 			}
 
 			if dist < 10 {
-				b.logger.Info(
+				b.logger.Debug(
 					"found similar message",
 					zap.Int("distance", dist),
 					zap.Int("id", msg.ID),
@@ -207,7 +202,7 @@ func (b *BayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models
 		}
 
 		if dist < 15 {
-			b.logger.Info(
+			b.logger.Debug(
 				"found similar message",
 				zap.Int("distance", dist),
 				zap.Int("id", m.ID),
@@ -479,7 +474,7 @@ func (b *BayanBot) processVideo(ctx context.Context, api *bot.Bot, message *mode
 			dist /= 4
 
 			if dist < 10 {
-				b.logger.Info(
+				b.logger.Debug(
 					"found similar message",
 					zap.Int("distance", dist),
 					zap.Int("id", msg.Msg.ID),
@@ -560,7 +555,7 @@ func (b *BayanBot) compareVideo(ctx context.Context, api *bot.Bot, message *mode
 			dist /= 4
 
 			if dist < 15 {
-				b.logger.Info(
+				b.logger.Debug(
 					"found similar message",
 					zap.Int("distance", dist),
 					zap.Int("id", msg.Msg.ID),
@@ -613,7 +608,7 @@ func (b *BayanBot) processVideoThumbnail(ctx context.Context, api *bot.Bot, msg 
 			}
 
 			if dist < 10 {
-				b.logger.Info(
+				b.logger.Debug(
 					"found similar message",
 					zap.Int("distance", dist),
 					zap.Int("id", msg.ID),
@@ -648,7 +643,7 @@ type Environment struct {
 }
 
 func main() {
-	logger, err := zap.NewDevelopment()
+	logger, err := zap.NewProduction()
 	if err != nil {
 		panic(err)
 	}
@@ -667,7 +662,7 @@ func main() {
 	bayanBot := NewBayanBot(config.TelegramToken, store, logger)
 
 	opts := []bot.Option{
-		bot.WithMiddlewares(bayanBot.processMessage),
+		bot.WithDefaultHandler(bayanBot.processMessage),
 		bot.WithMessageTextHandler("/start", bot.MatchTypeExact, bayanBot.startCmd),
 		bot.WithMessageTextHandler("/compare", bot.MatchTypeExact, bayanBot.compareCmd),
 	}
