@@ -12,25 +12,29 @@ import (
 	"go.uber.org/zap"
 	"image/jpeg"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"time"
 )
 
 type BayanBot struct {
-	token  string
-	logger *zap.Logger
-	store  *storage.Storage
+	token          string
+	logger         *zap.Logger
+	store          *storage.Storage
+	kekReplyChance float64
 }
 
-func NewBayanBot(token string, store *storage.Storage, logger *zap.Logger) *BayanBot {
+func NewBayanBot(token string, store *storage.Storage, logger *zap.Logger, kekReplyChance float64) *BayanBot {
 	return &BayanBot{
-		token:  token,
-		logger: logger,
-		store:  store,
+		token:          token,
+		logger:         logger,
+		store:          store,
+		kekReplyChance: kekReplyChance,
 	}
 }
 
@@ -65,6 +69,31 @@ func (b *BayanBot) processMessage(ctx context.Context, api *bot.Bot, update *mod
 
 	if update.Message.Story != nil {
 		// TODO: Add story processing when telegram bot api will support it
+	}
+
+	if update.Message.Text != "" {
+		matchBayan, err := regexp.MatchString(`(?i)баян`, update.Message.Text)
+		if err != nil {
+			b.logger.Error("failed to match string", zap.Error(err))
+		}
+
+		if matchBayan && rand.Float64() < b.kekReplyChance {
+			phrases := []string{
+				"Не умничай",
+				"Самый умный",
+				"Ок и что?",
+				"Спасибо",
+				"Бывает такое",
+			}
+			_, err = api.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID:           update.Message.Chat.ID,
+				Text:             phrases[rand.Intn(len(phrases))],
+				ReplyToMessageID: update.Message.ID,
+			})
+			if err != nil {
+				b.logger.Error("failed to send message", zap.Error(err))
+			}
+		}
 	}
 }
 
@@ -639,7 +668,8 @@ func (b *BayanBot) processVideoThumbnail(ctx context.Context, api *bot.Bot, msg 
 }
 
 type Environment struct {
-	TelegramToken string `env:"BOT_TOKEN,required"`
+	TelegramToken  string  `env:"BOT_TOKEN,required"`
+	KekReplyChance float64 `env:"KEK_REPLY_CHANCE" envDefault:"0.3"`
 }
 
 func main() {
@@ -659,7 +689,7 @@ func main() {
 		logger.Fatal("failed to create storage", zap.Error(err))
 	}
 
-	bayanBot := NewBayanBot(config.TelegramToken, store, logger)
+	bayanBot := NewBayanBot(config.TelegramToken, store, logger, config.KekReplyChance)
 
 	opts := []bot.Option{
 		bot.WithDefaultHandler(bayanBot.processMessage),
