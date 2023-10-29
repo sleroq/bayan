@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"time"
 )
@@ -58,7 +59,7 @@ func (b *BayanBot) processMessage(next bot.HandlerFunc) bot.HandlerFunc {
 		}
 
 		if update.Message.Video != nil {
-			err := b.processPicture(ctx, api, update.Message, *update.Message.Video.Thumbnail)
+			err := b.processVideo(ctx, api, update.Message)
 			if err != nil {
 				b.logger.Error("failed to process video", zap.Error(err))
 			}
@@ -131,10 +132,10 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 	}
 
 	// Will find the first match and stop
-	similar, err := b.store.FindMsgFilter(
+	similar, err := b.store.FindMsgPictureFilter(
 		msg.Chat.ID,
 		1,
-		func(msg *storage.Message) (dist int, ok bool, err error) {
+		func(msg *storage.MessagePicture) (dist int, ok bool, err error) {
 			dist, err = dHash.Distance(msg.DHash)
 			if err != nil {
 				return 0, false, errors.Wrap(err, "failed to get distance")
@@ -162,7 +163,7 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 			return errors.Wrap(err, "failed to reply bayan")
 		}
 	} else {
-		err = b.store.SaveMessage(msg, pHash, dHash)
+		err = b.store.SaveMessagePicture(msg, pHash, dHash)
 		if err != nil {
 			return errors.Wrap(err, "failed to save message")
 		}
@@ -195,7 +196,7 @@ func (b *BayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models
 	}
 
 	// Will find all similar messages
-	similar, err := b.store.FindMsgFilter(msg.Chat.ID, 0, func(m *storage.Message) (dist int, ok bool, err error) {
+	similar, err := b.store.FindMsgPictureFilter(msg.Chat.ID, 0, func(m *storage.MessagePicture) (dist int, ok bool, err error) {
 		if m.ID == msg.ReplyToMessage.ID {
 			return 0, false, nil
 		}
@@ -260,7 +261,7 @@ func (b *BayanBot) compareCmd(ctx context.Context, api *bot.Bot, update *models.
 	}
 
 	if update.Message.ReplyToMessage.Video != nil {
-		err := b.comparePicture(ctx, api, update.Message, *update.Message.ReplyToMessage.Video.Thumbnail)
+		err := b.compareVideo(ctx, api, update.Message)
 		if err != nil {
 			b.logger.Error("failed to process video", zap.Error(err))
 		}
@@ -282,7 +283,7 @@ func (b *BayanBot) compareCmd(ctx context.Context, api *bot.Bot, update *models.
 func (b *BayanBot) replySimilar(ctx context.Context, api *bot.Bot, msg *models.Message, similar []*storage.SimilarMessage) error {
 	text := "Что-то похожее:\n"
 	for _, s := range similar {
-		chatID := s.Msg.ChatID + 1000000000000
+		chatID := (s.Msg.ChatID + 1000000000000) * -1
 		text += fmt.Sprintf("- https://t.me/c/%d/%d\n", chatID, s.Msg.ID)
 	}
 
@@ -293,6 +294,350 @@ func (b *BayanBot) replySimilar(ctx context.Context, api *bot.Bot, msg *models.M
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to send message")
+	}
+
+	return nil
+}
+
+func hashPicFile(path string) (dHash, pHash *goimagehash.ImageHash, err error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to open file")
+	}
+
+	img, err := jpeg.Decode(file)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to decode image")
+	}
+
+	pHash, err = goimagehash.PerceptionHash(img)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get perception hash")
+	}
+
+	dHash, err = goimagehash.DifferenceHash(img)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get perception hash")
+	}
+
+	return pHash, dHash, nil
+}
+
+func (b *BayanBot) hashVideo(ctx context.Context, api *bot.Bot, video *models.Video) (pHashes, dHashes *storage.VideoHashes, err error) {
+	pHashes = &storage.VideoHashes{}
+	dHashes = &storage.VideoHashes{}
+
+	file, err := b.downloadFile(ctx, api, video.FileID)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to download file")
+	}
+
+	// Create temp dir
+	dirName := bot.RandomString(10)
+	err = os.Mkdir(dirName, 0755)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to create temp dir")
+	}
+
+	// Cleanup
+	defer func() {
+		clErr := os.RemoveAll(dirName)
+		if clErr != nil {
+			b.logger.Error("failed to remove temp dir", zap.Error(err))
+		}
+	}()
+
+	// Save video to temp dir
+	fileName := fmt.Sprintf("%s/%s.mp4", dirName, video.FileID)
+	f, err := os.Create(fileName)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to create file")
+	}
+
+	_, err = io.Copy(f, file)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to copy file")
+	}
+
+	err = file.Close()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to close file")
+	}
+
+	err = f.Close()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to close file")
+	}
+
+	// Extract scenes from video
+	err = exec.Command("ffmpeg", "-i", fileName, "-vf", "select=gt(scene,0.2)", "-vsync", "vfr", "-vf", "fps=1", dirName+"/out%d.jpg").Run()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to extract scenes from video")
+	}
+
+	// Get frames count
+	files, err := os.ReadDir(dirName)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to read dir")
+	}
+
+	if len(files) < 4 {
+		return nil, nil, errors.New("not enough frames")
+	}
+
+	// Hash frames
+	framesPHashes, framesDHashes, err := hashFrames(dirName, files)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to hash frames")
+	}
+
+	return framesPHashes, framesDHashes, nil
+}
+
+func hashFrames(dirName string, files []os.DirEntry) (framesPHashes, framesDHashes *storage.VideoHashes, err error) {
+	framesPHashes = &storage.VideoHashes{}
+	framesDHashes = &storage.VideoHashes{}
+
+	fileA := dirName + "/" + files[1].Name()
+	pHashA, dHashA, err := hashPicFile(fileA)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to hash picture")
+	}
+	framesPHashes.FrameA = pHashA
+	framesDHashes.FrameA = dHashA
+
+	fileB := dirName + "/" + files[len(files)/4].Name()
+	pHashB, dHashB, err := hashPicFile(fileB)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to hash picture")
+	}
+	framesPHashes.FrameB = pHashB
+	framesDHashes.FrameB = dHashB
+
+	fileC := dirName + "/" + files[len(files)-len(files)/4].Name()
+	pHashC, dHashC, err := hashPicFile(fileC)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to hash picture")
+	}
+	framesPHashes.FrameC = pHashC
+	framesDHashes.FrameC = dHashC
+
+	fileD := dirName + "/" + files[len(files)-2].Name()
+	pHashD, dHashD, err := hashPicFile(fileD)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to hash picture")
+	}
+	framesPHashes.FrameD = pHashD
+	framesDHashes.FrameD = dHashD
+
+	return framesPHashes, framesDHashes, nil
+}
+
+func (b *BayanBot) processVideo(ctx context.Context, api *bot.Bot, message *models.Message) error {
+	if message.Video.FileSize > 20*1024*1024 {
+		err := b.processVideoThumbnail(ctx, api, message)
+		if err != nil {
+			return errors.Wrap(err, "failed to process video thumbnail")
+		}
+	}
+
+	framesPHashes, framesDHashes, err := b.hashVideo(ctx, api, message.Video)
+	if err != nil {
+		return errors.Wrap(err, "failed to hash video")
+	}
+
+	similar, err := b.store.FindMsgVideoFilter(
+		message.Chat.ID,
+		1,
+		func(msg *storage.MessageVideo) (dist int, ok bool, err error) {
+			// Calculate average distance
+			dist = 0
+			distA, err := framesDHashes.FrameA.Distance(msg.DHashes.FrameA)
+			if err != nil {
+				return 0, false, errors.Wrap(err, "failed to get distance")
+			}
+
+			distB, err := framesDHashes.FrameB.Distance(msg.DHashes.FrameB)
+			if err != nil {
+				return 0, false, errors.Wrap(err, "failed to get distance")
+			}
+
+			distC, err := framesDHashes.FrameC.Distance(msg.DHashes.FrameC)
+			if err != nil {
+				return 0, false, errors.Wrap(err, "failed to get distance")
+			}
+
+			distD, err := framesDHashes.FrameD.Distance(msg.DHashes.FrameD)
+			if err != nil {
+				return 0, false, errors.Wrap(err, "failed to get distance")
+			}
+
+			dist += distA
+			dist += distB
+			dist += distC
+			dist += distD
+			dist /= 4
+
+			if dist < 10 {
+				b.logger.Info(
+					"found similar message",
+					zap.Int("distance", dist),
+					zap.Int("id", msg.Msg.ID),
+				)
+				return dist, true, nil
+			}
+
+			return dist, false, nil
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to find similar messages")
+	}
+
+	if len(similar) > 0 {
+		err := b.replyBayan(ctx, api, message, similar[0])
+		if err != nil {
+			return errors.Wrap(err, "failed to reply bayan")
+		}
+	} else {
+		err = b.store.SaveMessageVideo(message, framesPHashes, framesDHashes)
+		if err != nil {
+			return errors.Wrap(err, "failed to save message")
+		}
+	}
+
+	return nil
+}
+
+func (b *BayanBot) compareVideo(ctx context.Context, api *bot.Bot, message *models.Message) error {
+	video := message.ReplyToMessage.Video
+	if message.ReplyToMessage.Video.FileSize > 20*1024*1024 {
+		err := b.processVideoThumbnail(ctx, api, message)
+		if err != nil {
+			return errors.Wrap(err, "failed to process video thumbnail")
+		}
+	}
+
+	_, framesDHashes, err := b.hashVideo(ctx, api, video)
+	if err != nil {
+		return errors.Wrap(err, "failed to hash video")
+	}
+
+	similar, err := b.store.FindMsgVideoFilter(
+		message.Chat.ID,
+		0,
+		func(msg *storage.MessageVideo) (dist int, ok bool, err error) {
+			if msg.Msg.ID == message.ReplyToMessage.ID {
+				return 0, false, nil
+			}
+
+			// Calculate average distance
+			dist = 0
+			distA, err := framesDHashes.FrameA.Distance(msg.DHashes.FrameA)
+			if err != nil {
+				return 0, false, errors.Wrap(err, "failed to get distance")
+			}
+
+			distB, err := framesDHashes.FrameB.Distance(msg.DHashes.FrameB)
+			if err != nil {
+				return 0, false, errors.Wrap(err, "failed to get distance")
+			}
+
+			distC, err := framesDHashes.FrameC.Distance(msg.DHashes.FrameC)
+			if err != nil {
+				return 0, false, errors.Wrap(err, "failed to get distance")
+			}
+
+			distD, err := framesDHashes.FrameD.Distance(msg.DHashes.FrameD)
+			if err != nil {
+				return 0, false, errors.Wrap(err, "failed to get distance")
+			}
+
+			dist += distA
+			dist += distB
+			dist += distC
+			dist += distD
+			dist /= 4
+
+			if dist < 15 {
+				b.logger.Info(
+					"found similar message",
+					zap.Int("distance", dist),
+					zap.Int("id", msg.Msg.ID),
+				)
+				return dist, true, nil
+			}
+
+			return dist, false, nil
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to find similar messages")
+	}
+
+	if len(similar) > 0 {
+		err := b.replySimilar(ctx, api, message, similar)
+		if err != nil {
+			return errors.Wrap(err, "failed to reply bayan")
+		}
+	} else {
+		_, err = api.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID:           message.Chat.ID,
+			Text:             "Похожих постов не видел",
+			ReplyToMessageID: message.ID,
+		})
+		if err != nil {
+			return errors.Wrap(err, "failed to send message")
+		}
+	}
+
+	return nil
+}
+
+func (b *BayanBot) processVideoThumbnail(ctx context.Context, api *bot.Bot, msg *models.Message) error {
+	// TODO: Check if thumbnail is mostly black
+
+	pHash, dHash, err := b.hashPicture(ctx, api, *msg.Video.Thumbnail)
+	if err != nil {
+		return errors.Wrap(err, "failed to hash pictures")
+	}
+
+	// Will find the first match and stop
+	similar, err := b.store.FindMsgPictureFilter(
+		msg.Chat.ID,
+		1,
+		func(msg *storage.MessagePicture) (dist int, ok bool, err error) {
+			dist, err = dHash.Distance(msg.DHash)
+			if err != nil {
+				return 0, false, errors.Wrap(err, "failed to get distance")
+			}
+
+			if dist < 10 {
+				b.logger.Info(
+					"found similar message",
+					zap.Int("distance", dist),
+					zap.Int("id", msg.ID),
+				)
+				return dist, true, nil
+			}
+
+			return dist, false, nil
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to find similar messages")
+	}
+
+	if len(similar) > 0 {
+		err := b.replyBayan(ctx, api, msg, similar[0])
+		if err != nil {
+			return errors.Wrap(err, "failed to reply bayan")
+		}
+	} else {
+		err = b.store.SaveMessagePicture(msg, pHash, dHash)
+		if err != nil {
+			return errors.Wrap(err, "failed to save message")
+		}
 	}
 
 	return nil
