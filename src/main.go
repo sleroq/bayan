@@ -27,14 +27,21 @@ type BayanBot struct {
 	logger         *zap.Logger
 	store          *storage.Storage
 	kekReplyChance float64
+	showSimilarity bool
 }
 
-func NewBayanBot(token string, store *storage.Storage, logger *zap.Logger, kekReplyChance float64) *BayanBot {
+type BayanConfig struct {
+	kekReplyChance float64 `env:"KEK_REPLY_CHANCE"`
+	showSimilarity bool    `env:"SHOW_SIMILARITY"`
+}
+
+func NewBayanBot(token string, store *storage.Storage, logger *zap.Logger, cfg BayanConfig) *BayanBot {
 	return &BayanBot{
 		token:          token,
 		logger:         logger,
 		store:          store,
-		kekReplyChance: kekReplyChance,
+		kekReplyChance: cfg.kekReplyChance,
+		showSimilarity: cfg.showSimilarity,
 	}
 }
 
@@ -198,7 +205,12 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 
 func (b *BayanBot) replyBayan(ctx context.Context, api *bot.Bot, msg *models.Message, similar *storage.SimilarMessage) error {
 	chatID := (similar.Msg.ChatID + 1000000000000) * -1
-	text := fmt.Sprintf("[Баян](https://t.me/c/%d/%d)\n", chatID, similar.Msg.ID)
+	var text string
+	if b.showSimilarity {
+		text = fmt.Sprintf("[Баян](https://t.me/c/%d/%d) (distance: %d)\n", chatID, similar.Msg.ID, similar.Distance)
+	} else {
+		text = fmt.Sprintf("[Баян](https://t.me/c/%d/%d)\n", chatID, similar.Msg.ID)
+	}
 
 	_, err := api.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:           msg.Chat.ID,
@@ -670,6 +682,7 @@ func (b *BayanBot) processVideoThumbnail(ctx context.Context, api *bot.Bot, msg 
 type Environment struct {
 	TelegramToken  string  `env:"BOT_TOKEN,required"`
 	KekReplyChance float64 `env:"KEK_REPLY_CHANCE" envDefault:"0.3"`
+	ShowSimilarity bool    `env:"SHOW_SIMILARITY" envDefault:"false"`
 }
 
 func main() {
@@ -689,7 +702,15 @@ func main() {
 		logger.Fatal("failed to create storage", zap.Error(err))
 	}
 
-	bayanBot := NewBayanBot(config.TelegramToken, store, logger, config.KekReplyChance)
+	bayanBot := NewBayanBot(
+		config.TelegramToken,
+		store,
+		logger,
+		BayanConfig{
+			kekReplyChance: config.KekReplyChance,
+			showSimilarity: config.ShowSimilarity,
+		},
+	)
 
 	opts := []bot.Option{
 		bot.WithDefaultHandler(bayanBot.processMessage),
