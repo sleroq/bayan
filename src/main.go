@@ -475,6 +475,8 @@ func (b *BayanBot) processVideo(ctx context.Context, api *bot.Bot, message *mode
 		if err != nil {
 			return errors.Wrap(err, "failed to process video thumbnail")
 		}
+
+		return nil
 	}
 
 	framesPHashes, framesDHashes, err := b.hashVideo(ctx, api, message.Video)
@@ -552,6 +554,8 @@ func (b *BayanBot) compareVideo(ctx context.Context, api *bot.Bot, message *mode
 		if err != nil {
 			return errors.Wrap(err, "failed to process video thumbnail")
 		}
+
+		return nil
 	}
 
 	_, framesDHashes, err := b.hashVideo(ctx, api, video)
