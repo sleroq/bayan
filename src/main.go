@@ -193,11 +193,11 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 		if err != nil {
 			return errors.Wrap(err, "failed to reply bayan")
 		}
-	} else {
-		err = b.store.SaveMessagePicture(msg, pHash, dHash)
-		if err != nil {
-			return errors.Wrap(err, "failed to save message")
-		}
+	}
+
+	err = b.store.SaveMessagePicture(msg, pHash, dHash)
+	if err != nil {
+		return errors.Wrap(err, "failed to save message")
 	}
 
 	return nil
@@ -535,11 +535,11 @@ func (b *BayanBot) processVideo(ctx context.Context, api *bot.Bot, message *mode
 		if err != nil {
 			return errors.Wrap(err, "failed to reply bayan")
 		}
-	} else {
-		err = b.store.SaveMessageVideo(message, framesPHashes, framesDHashes)
-		if err != nil {
-			return errors.Wrap(err, "failed to save message")
-		}
+	}
+
+	err = b.store.SaveMessageVideo(message, framesPHashes, framesDHashes)
+	if err != nil {
+		return errors.Wrap(err, "failed to save message")
 	}
 
 	return nil
