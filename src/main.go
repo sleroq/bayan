@@ -167,7 +167,7 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 		msg.Chat.ID,
 		1,
 		func(msg *storage.MessagePicture) (dist int, ok bool, err error) {
-			dist, err = dHash.Distance(msg.DHash)
+			dist, err = pHash.Distance(msg.PHash)
 			if err != nil {
 				return 0, false, errors.Wrap(err, "failed to get distance")
 			}
@@ -488,22 +488,22 @@ func (b *BayanBot) processVideo(ctx context.Context, api *bot.Bot, message *mode
 		func(msg *storage.MessageVideo) (dist int, ok bool, err error) {
 			// Calculate average distance
 			dist = 0
-			distA, err := framesDHashes.FrameA.Distance(msg.DHashes.FrameA)
+			distA, err := framesPHashes.FrameA.Distance(msg.PHashes.FrameA)
 			if err != nil {
 				return 0, false, errors.Wrap(err, "failed to get distance")
 			}
 
-			distB, err := framesDHashes.FrameB.Distance(msg.DHashes.FrameB)
+			distB, err := framesPHashes.FrameB.Distance(msg.PHashes.FrameB)
 			if err != nil {
 				return 0, false, errors.Wrap(err, "failed to get distance")
 			}
 
-			distC, err := framesDHashes.FrameC.Distance(msg.DHashes.FrameC)
+			distC, err := framesPHashes.FrameC.Distance(msg.PHashes.FrameC)
 			if err != nil {
 				return 0, false, errors.Wrap(err, "failed to get distance")
 			}
 
-			distD, err := framesDHashes.FrameD.Distance(msg.DHashes.FrameD)
+			distD, err := framesPHashes.FrameD.Distance(msg.PHashes.FrameD)
 			if err != nil {
 				return 0, false, errors.Wrap(err, "failed to get distance")
 			}
@@ -643,7 +643,7 @@ func (b *BayanBot) processVideoThumbnail(ctx context.Context, api *bot.Bot, msg 
 		msg.Chat.ID,
 		1,
 		func(msg *storage.MessagePicture) (dist int, ok bool, err error) {
-			dist, err = dHash.Distance(msg.DHash)
+			dist, err = pHash.Distance(msg.PHash)
 			if err != nil {
 				return 0, false, errors.Wrap(err, "failed to get distance")
 			}
@@ -669,11 +669,11 @@ func (b *BayanBot) processVideoThumbnail(ctx context.Context, api *bot.Bot, msg 
 		if err != nil {
 			return errors.Wrap(err, "failed to reply bayan")
 		}
-	} else {
-		err = b.store.SaveMessagePicture(msg, pHash, dHash)
-		if err != nil {
-			return errors.Wrap(err, "failed to save message")
-		}
+	}
+
+	err = b.store.SaveMessagePicture(msg, pHash, dHash)
+	if err != nil {
+		return errors.Wrap(err, "failed to save message")
 	}
 
 	return nil
