@@ -18,11 +18,12 @@
           subPackages = [ "src" ];
           ldflags = [ "-s" "-w" ];
           buildInputs = with pkgs; [ sqlite ffmpeg ];
-          nativeBuildInputs = with pkgs; [ pkg-config ];
+          nativeBuildInputs = with pkgs; [ pkg-config makeWrapper ];
           env.CGO_ENABLED = "1";
           modRoot = ".";
           postInstall = ''
             mv $out/bin/src $out/bin/bayan
+            wrapProgram $out/bin/bayan --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.ffmpeg ]}
           '';
           meta = with pkgs.lib; {
             description = "Duplicate image and video detector bot for Telegram";
