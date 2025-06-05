@@ -718,8 +718,8 @@ func main() {
 
 	opts := []bot.Option{
 		bot.WithDefaultHandler(bayanBot.processMessage),
-		bot.WithMessageTextHandler("/start", bot.MatchTypeExact, bayanBot.startCmd),
-		bot.WithMessageTextHandler("/compare", bot.MatchTypeExact, bayanBot.compareCmd),
+		bot.WithMessageTextHandler("/start", bot.MatchTypePrefix, bayanBot.startCmd),
+		bot.WithMessageTextHandler("/compare", bot.MatchTypePrefix, bayanBot.compareCmd),
 	}
 
 	b, err := bot.New(config.TelegramToken, opts...)
