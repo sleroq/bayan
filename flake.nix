@@ -21,6 +21,9 @@
           nativeBuildInputs = with pkgs; [ pkg-config ];
           env.CGO_ENABLED = "1";
           modRoot = ".";
+          postInstall = ''
+            mv $out/bin/src $out/bin/bayan
+          '';
           meta = with pkgs.lib; {
             description = "Duplicate image and video detector bot for Telegram";
             homepage = "https://github.com/sleroq/bayan";
@@ -51,7 +54,6 @@
           '';
           CGO_ENABLED = "1";
         };
-        apps.default = flake-utils.lib.mkApp { drv = bayan; exePath = "/bin/src"; };
         formatter = pkgs.nixpkgs-fmt;
       });
 } 
