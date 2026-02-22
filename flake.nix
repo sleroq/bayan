@@ -14,7 +14,7 @@
           pname = "bayan";
           version = "0.1.0";
           src = ./.;
-          vendorHash = "sha256-Rww2ArYg57FvshFJCF3x3AWgXu+FxdOQU6FSWanur+k=";
+          vendorHash = "sha256-/ucjMA675tNtscH5PxNOG+Tyh/4evpcoOTVwBHfukqY=";
           subPackages = [ "src" ];
           ldflags = [ "-s" "-w" ];
           buildInputs = with pkgs; [ sqlite ffmpeg ];

@@ -93,9 +93,9 @@ func (b *BayanBot) processMessage(ctx context.Context, api *bot.Bot, update *mod
 				"Бывает такое",
 			}
 			_, err = api.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID:           update.Message.Chat.ID,
-				Text:             phrases[rand.Intn(len(phrases))],
-				ReplyToMessageID: update.Message.ID,
+				ChatID:          update.Message.Chat.ID,
+				Text:            phrases[rand.Intn(len(phrases))],
+				ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
 			})
 			if err != nil {
 				b.logger.Error("failed to send message", zap.Error(err))
@@ -213,10 +213,10 @@ func (b *BayanBot) replyBayan(ctx context.Context, api *bot.Bot, msg *models.Mes
 	}
 
 	_, err := api.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:           msg.Chat.ID,
-		Text:             text,
-		ReplyToMessageID: msg.ID,
-		ParseMode:        models.ParseModeMarkdown,
+		ChatID:          msg.Chat.ID,
+		Text:            text,
+		ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
+		ParseMode:       models.ParseModeMarkdown,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to send message")
@@ -264,9 +264,9 @@ func (b *BayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models
 		}
 	} else {
 		_, err = api.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:           msg.Chat.ID,
-			Text:             "Похожих постов не видел",
-			ReplyToMessageID: msg.ID,
+			ChatID:          msg.Chat.ID,
+			Text:            "Похожих постов не видел",
+			ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to send message")
@@ -279,9 +279,9 @@ func (b *BayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models
 func (b *BayanBot) compareCmd(ctx context.Context, api *bot.Bot, update *models.Update) {
 	if update.Message.ReplyToMessage == nil {
 		_, err := api.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:           update.Message.Chat.ID,
-			Text:             "Ответь на картинку/видео, которую хотите сравнить",
-			ReplyToMessageID: update.Message.ID,
+			ChatID:          update.Message.Chat.ID,
+			Text:            "Ответь на картинку/видео, которое хотите сравнить",
+			ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
 		})
 		if err != nil {
 			b.logger.Error("failed to send message", zap.Error(err))
@@ -306,9 +306,9 @@ func (b *BayanBot) compareCmd(ctx context.Context, api *bot.Bot, update *models.
 	if update.Message.ReplyToMessage.Story != nil {
 		// TODO: Add story processing when telegram bot api will support it
 		_, err := api.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:           update.Message.Chat.ID,
-			Text:             "Дуров не дает мне работать со сторисами",
-			ReplyToMessageID: update.Message.ID,
+			ChatID:          update.Message.Chat.ID,
+			Text:            "Дуров не дает мне работать со сторисами",
+			ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
 		})
 		if err != nil {
 			b.logger.Error("failed to send message", zap.Error(err))
@@ -324,9 +324,9 @@ func (b *BayanBot) replySimilar(ctx context.Context, api *bot.Bot, msg *models.M
 	}
 
 	_, err := api.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:           msg.Chat.ID,
-		Text:             text,
-		ReplyToMessageID: msg.ID,
+		ChatID:          msg.Chat.ID,
+		Text:            text,
+		ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to send message")
@@ -622,9 +622,9 @@ func (b *BayanBot) compareVideo(ctx context.Context, api *bot.Bot, message *mode
 		}
 	} else {
 		_, err = api.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:           message.Chat.ID,
-			Text:             "Похожих постов не видел",
-			ReplyToMessageID: message.ID,
+			ChatID:          message.Chat.ID,
+			Text:            "Похожих постов не видел",
+			ReplyParameters: &models.ReplyParameters{MessageID: message.ID},
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to send message")
