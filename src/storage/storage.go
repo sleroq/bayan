@@ -9,6 +9,7 @@ import (
 	"github.com/go-telegram/bot/models"
 	_ "github.com/mattn/go-sqlite3"
 	"io"
+	"slices"
 	"sort"
 	"time"
 )
@@ -104,6 +105,12 @@ type SimilarMessage struct {
 	Distance int
 }
 
+type storedMessage struct {
+	Message
+	isVideo bool
+	pHash   []byte
+}
+
 func New(filepath string) (*Storage, error) {
 	db, err := sql.Open("sqlite3", filepath)
 	if err != nil {
@@ -188,6 +195,132 @@ func (s *Storage) SaveBayanEvent(chatID int64, messageID int, userID int64, matc
 	}
 
 	return nil
+}
+
+// BackfillBayanEvents recreates duplicate detections from the stored hashes.
+// It returns the number of events inserted; existing events are left unchanged.
+func (s *Storage) BackfillBayanEvents() (int, error) {
+	rows, err := s.db.Query(`
+		select id, userId, chatId, sentDate, isVideo, pHash
+		from messages
+		order by chatId asc, id asc;
+	`)
+	if err != nil {
+		return 0, errors.Wrap(err, "querying messages for bayan event backfill")
+	}
+
+	var messages []storedMessage
+	for rows.Next() {
+		var msg storedMessage
+		if err := rows.Scan(&msg.ID, &msg.UserID, &msg.ChatID, &msg.SentDate, &msg.isVideo, &msg.pHash); err != nil {
+			_ = rows.Close()
+			return 0, errors.Wrap(err, "scanning message for bayan event backfill")
+		}
+		messages = append(messages, msg)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, errors.Wrap(err, "iterating messages for bayan event backfill")
+	}
+	if err := rows.Close(); err != nil {
+		return 0, errors.Wrap(err, "closing messages for bayan event backfill")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, errors.Wrap(err, "starting bayan event backfill")
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	insert, err := tx.Prepare(`
+		insert or ignore into bayan_events (chatId, messageId, userId, matchedMessageId, distance, createdAt)
+		values (?, ?, ?, ?, ?, ?);
+	`)
+	if err != nil {
+		return 0, errors.Wrap(err, "preparing bayan event backfill insert")
+	}
+	defer func() { _ = insert.Close() }()
+
+	previous := make(map[int][]storedMessage)
+	inserted := 0
+	for _, current := range messages {
+		for _, candidate := range slices.Backward(previous[current.ChatID]) {
+			if candidate.isVideo != current.isVideo {
+				continue
+			}
+
+			var distance int
+			if current.isVideo {
+				currentHashes, err := LoadVideoHashes(bytes.NewReader(current.pHash))
+				if err != nil {
+					return 0, errors.Wrap(err, "loading video hashes for bayan event backfill")
+				}
+				candidateHashes, err := LoadVideoHashes(bytes.NewReader(candidate.pHash))
+				if err != nil {
+					return 0, errors.Wrap(err, "loading candidate video hashes for bayan event backfill")
+				}
+				distance, err = averageVideoHashDistance(currentHashes, candidateHashes)
+				if err != nil {
+					return 0, errors.Wrap(err, "calculating video distance for bayan event backfill")
+				}
+			} else {
+				currentHash, err := goimagehash.LoadImageHash(bytes.NewReader(current.pHash))
+				if err != nil {
+					return 0, errors.Wrap(err, "loading picture hash for bayan event backfill")
+				}
+				candidateHash, err := goimagehash.LoadImageHash(bytes.NewReader(candidate.pHash))
+				if err != nil {
+					return 0, errors.Wrap(err, "loading candidate picture hash for bayan event backfill")
+				}
+				distance, err = currentHash.Distance(candidateHash)
+				if err != nil {
+					return 0, errors.Wrap(err, "calculating picture distance for bayan event backfill")
+				}
+			}
+
+			if distance < 10 {
+				result, err := insert.Exec(current.ChatID, current.ID, current.UserID, candidate.ID, distance, current.SentDate)
+				if err != nil {
+					return 0, errors.Wrap(err, "inserting bayan event backfill")
+				}
+				count, err := result.RowsAffected()
+				if err != nil {
+					return 0, errors.Wrap(err, "counting bayan event backfill insert")
+				}
+				inserted += int(count)
+				break
+			}
+		}
+
+		previous[current.ChatID] = append(previous[current.ChatID], current)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, errors.Wrap(err, "committing bayan event backfill")
+	}
+
+	return inserted, nil
+}
+
+func averageVideoHashDistance(a, b *VideoHashes) (int, error) {
+	distanceA, err := a.FrameA.Distance(b.FrameA)
+	if err != nil {
+		return 0, err
+	}
+	distanceB, err := a.FrameB.Distance(b.FrameB)
+	if err != nil {
+		return 0, err
+	}
+	distanceC, err := a.FrameC.Distance(b.FrameC)
+	if err != nil {
+		return 0, err
+	}
+	distanceD, err := a.FrameD.Distance(b.FrameD)
+	if err != nil {
+		return 0, err
+	}
+
+	return (distanceA + distanceB + distanceC + distanceD) / 4, nil
 }
 
 func (s *Storage) SaveMessagePicture(msg *models.Message, pHash *goimagehash.ImageHash, dHash *goimagehash.ImageHash) error {
