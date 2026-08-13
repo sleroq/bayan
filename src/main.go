@@ -193,6 +193,11 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 		if err != nil {
 			return errors.Wrap(err, "failed to reply bayan")
 		}
+
+		err = b.store.SaveBayanEvent(msg.Chat.ID, msg.ID, msg.From.ID, similar[0].Msg.ID, similar[0].Distance)
+		if err != nil {
+			return errors.Wrap(err, "failed to save bayan event")
+		}
 	}
 
 	err = b.store.SaveMessagePicture(msg, pHash, dHash)
@@ -537,6 +542,11 @@ func (b *BayanBot) processVideo(ctx context.Context, api *bot.Bot, message *mode
 		if err != nil {
 			return errors.Wrap(err, "failed to reply bayan")
 		}
+
+		err = b.store.SaveBayanEvent(message.Chat.ID, message.ID, message.From.ID, similar[0].Msg.ID, similar[0].Distance)
+		if err != nil {
+			return errors.Wrap(err, "failed to save bayan event")
+		}
 	}
 
 	err = b.store.SaveMessageVideo(message, framesPHashes, framesDHashes)
@@ -672,6 +682,11 @@ func (b *BayanBot) processVideoThumbnail(ctx context.Context, api *bot.Bot, msg 
 		err := b.replyBayan(ctx, api, msg, similar[0])
 		if err != nil {
 			return errors.Wrap(err, "failed to reply bayan")
+		}
+
+		err = b.store.SaveBayanEvent(msg.Chat.ID, msg.ID, msg.From.ID, similar[0].Msg.ID, similar[0].Distance)
+		if err != nil {
+			return errors.Wrap(err, "failed to save bayan event")
 		}
 	}
 

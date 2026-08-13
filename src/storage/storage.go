@@ -126,7 +126,68 @@ func New(filepath string) (*Storage, error) {
 		return nil, errors.Wrap(err, "creating messages table")
 	}
 
+	_, err = db.Exec(`
+		create table if not exists bayan_events (
+			chatId integer not null,
+			messageId integer not null,
+			userId integer not null,
+			matchedMessageId integer,
+			distance integer,
+			createdAt timestamp not null,
+			primary key (chatId, messageId)
+		);
+	`)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating bayan_events table")
+	}
+
+	_, err = db.Exec(`
+		create index if not exists idx_bayan_events_chat_user on bayan_events (chatId, userId);
+	`)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating bayan_events chat user index")
+	}
+
+	_, err = db.Exec(`
+		create index if not exists idx_bayan_events_chat_created_at on bayan_events (chatId, createdAt);
+	`)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating bayan_events chat createdAt index")
+	}
+
 	return &Storage{db}, nil
+}
+
+func (s *Storage) SaveBayanEvent(chatID int64, messageID int, userID int64, matchedMessageID int, distance int) error {
+	_, err := s.db.Exec(`
+		insert or ignore into bayan_events (
+			chatId,
+			messageId,
+			userId,
+			matchedMessageId,
+			distance,
+			createdAt
+		) values (
+			:chatId,
+			:messageId,
+			:userId,
+			:matchedMessageId,
+			:distance,
+			:createdAt
+		);
+	`,
+		sql.Named("chatId", chatID),
+		sql.Named("messageId", messageID),
+		sql.Named("userId", userID),
+		sql.Named("matchedMessageId", matchedMessageID),
+		sql.Named("distance", distance),
+		sql.Named("createdAt", time.Now()),
+	)
+	if err != nil {
+		return errors.Wrap(err, "saving bayan event")
+	}
+
+	return nil
 }
 
 func (s *Storage) SaveMessagePicture(msg *models.Message, pHash *goimagehash.ImageHash, dHash *goimagehash.ImageHash) error {
