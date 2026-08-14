@@ -9,12 +9,12 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        go = pkgs.go_1_24;
+        go = pkgs.go_1_26;
         bayan = pkgs.buildGoModule {
           pname = "bayan";
           version = "0.1.0";
           src = ./.;
-          vendorHash = "sha256-/ucjMA675tNtscH5PxNOG+Tyh/4evpcoOTVwBHfukqY=";
+          vendorHash = "sha256-WdMazid0J2+k17BqVQQyjjVQ0+0nJ3tW4e0WnbMlaL4=";
           subPackages = [ "src" ];
           ldflags = [ "-s" "-w" ];
           buildInputs = with pkgs; [ sqlite ffmpeg ];
@@ -57,4 +57,4 @@
         };
         formatter = pkgs.nixpkgs-fmt;
       });
-} 
+}

@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -72,10 +73,6 @@ func (b *BayanBot) processMessage(ctx context.Context, api *bot.Bot, update *mod
 		if err != nil {
 			b.logger.Error("failed to process video", zap.Error(err))
 		}
-	}
-
-	if update.Message.Story != nil {
-		// TODO: Add story processing when telegram bot api will support it
 	}
 
 	if update.Message.Text != "" {
@@ -317,15 +314,16 @@ func (b *BayanBot) compareCmd(ctx context.Context, api *bot.Bot, update *models.
 }
 
 func (b *BayanBot) replySimilar(ctx context.Context, api *bot.Bot, msg *models.Message, similar []*storage.SimilarMessage) error {
-	text := "Что-то похожее:\n"
+	var text strings.Builder
+	text.WriteString("Что-то похожее:\n")
 	for _, s := range similar {
 		chatID := (s.Msg.ChatID + 1000000000000) * -1
-		text += fmt.Sprintf("- https://t.me/c/%d/%d\n", chatID, s.Msg.ID)
+		fmt.Fprintf(&text, "- https://t.me/c/%d/%d\n", chatID, s.Msg.ID)
 	}
 
 	_, err := api.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          msg.Chat.ID,
-		Text:            text,
+		Text:            text.String(),
 		ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
 	})
 	if err != nil {
