@@ -33,7 +33,8 @@
             platforms = platforms.linux ++ platforms.darwin;
           };
         };
-      in {
+      in
+      {
         packages = { default = bayan; bayan = bayan; };
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [ go gopls go-tools ffmpeg sqlite pkg-config air delve ];
