@@ -28,6 +28,18 @@ func TestBayanDetectionFromTelegramCases(t *testing.T) {
 		{botReplyID: 609276, originalID: 604440, want: duplicatePicture},
 		{botReplyID: 609149, originalID: 474240, want: duplicatePicture},
 		{botReplyID: 607015, originalID: 322262, want: sameTemplate, knownIssue: "the detector does not classify templates separately yet"},
+		{botReplyID: 606654, originalID: 241418, want: distinctPicture, knownIssue: "current false positive"},
+		{botReplyID: 606571, originalID: 504540, want: duplicatePicture},
+		{botReplyID: 606551, originalID: 163523, want: distinctPicture},
+		{botReplyID: 606020, originalID: 284718, want: distinctPicture},
+		{botReplyID: 606005, originalID: 605792, want: distinctPicture},
+		{botReplyID: 605979, originalID: 243425, want: distinctPicture, knownIssue: "current false positive"},
+		{botReplyID: 605786, originalID: 537129, want: distinctPicture},
+		{botReplyID: 605776, originalID: 449572, want: duplicatePicture},
+		{botReplyID: 605773, originalID: 572864, want: distinctPicture, knownIssue: "current false positive"},
+		{botReplyID: 605758, originalID: 481513, want: duplicatePicture},
+		{botReplyID: 605478, originalID: 508567, want: sameTemplate, knownIssue: "the detector does not classify templates separately yet"},
+		{botReplyID: 605472, originalID: 374660, want: distinctPicture, knownIssue: "current false positive"},
 	}
 
 	for _, test := range tests {
