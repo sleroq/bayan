@@ -1,5 +1,5 @@
-src/testdata/bayan/** filter=git-crypt diff=git-crypt
-src/testdata/bayan/README.md !filter !diff
+internal/bayan/testdata/bayan/** filter=git-crypt diff=git-crypt
+internal/bayan/testdata/bayan/README.md !filter !diff
 
 bayan-reviews.json filter=git-crypt diff=git-crypt
 review-result.md filter=git-crypt diff=git-crypt

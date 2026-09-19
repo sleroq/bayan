@@ -1,4 +1,4 @@
-package main
+package bayan
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/corona10/goimagehash"
-	"github.com/sleroq/bayan/src/storage"
+	"github.com/sleroq/bayan/internal/storage"
 )
 
 type pictureDetection string

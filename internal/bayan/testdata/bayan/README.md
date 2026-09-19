@@ -26,7 +26,7 @@ the video to JPEG.
 Run the corpus with:
 
 ```sh
-go test -v ./src -run TestBayanDetectionFromTelegramCases
+go test -v ./internal/bayan -run TestBayanDetectionFromTelegramCases
 ```
 
 Desired `duplicate` mismatches fail the suite. Desired `distinct` and

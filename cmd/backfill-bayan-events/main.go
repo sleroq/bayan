@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sleroq/bayan/src/storage"
+	"github.com/sleroq/bayan/internal/storage"
 )
 
 func main() {

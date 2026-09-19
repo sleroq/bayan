@@ -7,4 +7,4 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 
 cd "$(dirname "$SCRIPTPATH")"
 
-go build -o dist/bayan src/*.go
+go build -o dist/bayan ./cmd/bayan
