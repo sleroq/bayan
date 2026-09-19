@@ -1,14 +1,13 @@
-package main
+package bayan
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Netflix/go-env"
 	"github.com/corona10/goimagehash"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
-	"github.com/sleroq/bayan/src/storage"
+	"github.com/sleroq/bayan/internal/storage"
 	"go.uber.org/zap"
 	"image/jpeg"
 	"io"
@@ -17,13 +16,12 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"os/signal"
 	"regexp"
 	"strings"
 	"time"
 )
 
-type BayanBot struct {
+type bayanBot struct {
 	token          string
 	logger         *zap.Logger
 	store          *storage.Storage
@@ -31,22 +29,22 @@ type BayanBot struct {
 	showSimilarity bool
 }
 
-type BayanConfig struct {
-	kekReplyChance float64 `env:"KEK_REPLY_CHANCE"`
-	showSimilarity bool    `env:"SHOW_SIMILARITY"`
+type Config struct {
+	KekReplyChance float64
+	ShowSimilarity bool
 }
 
-func NewBayanBot(token string, store *storage.Storage, logger *zap.Logger, cfg BayanConfig) *BayanBot {
-	return &BayanBot{
+func newBayanBot(token string, store *storage.Storage, logger *zap.Logger, cfg Config) *bayanBot {
+	return &bayanBot{
 		token:          token,
 		logger:         logger,
 		store:          store,
-		kekReplyChance: cfg.kekReplyChance,
-		showSimilarity: cfg.showSimilarity,
+		kekReplyChance: cfg.KekReplyChance,
+		showSimilarity: cfg.ShowSimilarity,
 	}
 }
 
-func (b *BayanBot) startCmd(ctx context.Context, api *bot.Bot, update *models.Update) {
+func (b *bayanBot) startCmd(ctx context.Context, api *bot.Bot, update *models.Update) {
 	_, err := api.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   "Hello, world!",
@@ -56,7 +54,7 @@ func (b *BayanBot) startCmd(ctx context.Context, api *bot.Bot, update *models.Up
 	}
 }
 
-func (b *BayanBot) processMessage(ctx context.Context, api *bot.Bot, update *models.Update) {
+func (b *bayanBot) processMessage(ctx context.Context, api *bot.Bot, update *models.Update) {
 	if update.Message == nil {
 		return
 	}
@@ -80,7 +78,7 @@ func (b *BayanBot) processMessage(ctx context.Context, api *bot.Bot, update *mod
 	}
 }
 
-func (b *BayanBot) processTextReply(ctx context.Context, api *bot.Bot, message *models.Message) {
+func (b *bayanBot) processTextReply(ctx context.Context, api *bot.Bot, message *models.Message) {
 	matchBayan, err := regexp.MatchString(`(?i)баян`, message.Text)
 	if err != nil {
 		b.logger.Error("failed to match string", zap.Error(err))
@@ -105,7 +103,7 @@ func (b *BayanBot) processTextReply(ctx context.Context, api *bot.Bot, message *
 	}
 }
 
-func (b *BayanBot) downloadFile(ctx context.Context, api *bot.Bot, fileID string) (io.ReadCloser, error) {
+func (b *bayanBot) downloadFile(ctx context.Context, api *bot.Bot, fileID string) (io.ReadCloser, error) {
 	fileInfo, err := api.GetFile(ctx, &bot.GetFileParams{
 		FileID: fileID,
 	})
@@ -128,7 +126,7 @@ func (b *BayanBot) downloadFile(ctx context.Context, api *bot.Bot, fileID string
 	return file.Body, nil
 }
 
-func (b *BayanBot) hashPicture(ctx context.Context, api *bot.Bot, pic models.PhotoSize) (pHash, dHash *goimagehash.ImageHash, err error) {
+func (b *bayanBot) hashPicture(ctx context.Context, api *bot.Bot, pic models.PhotoSize) (pHash, dHash *goimagehash.ImageHash, err error) {
 	file, err := b.downloadFile(ctx, api, pic.FileID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to download file: %w", err)
@@ -157,7 +155,7 @@ func (b *BayanBot) hashPicture(ctx context.Context, api *bot.Bot, pic models.Pho
 	return pHash, dHash, nil
 }
 
-func (b *BayanBot) pictureMatchFilter(pHash *goimagehash.ImageHash) func(*storage.MessagePicture) (int, bool, error) {
+func (b *bayanBot) pictureMatchFilter(pHash *goimagehash.ImageHash) func(*storage.MessagePicture) (int, bool, error) {
 	return func(msg *storage.MessagePicture) (dist int, ok bool, err error) {
 		dist, ok, err = pictureMatches(pHash, msg.PHash)
 		if err != nil {
@@ -186,7 +184,7 @@ func pictureMatches(left, right *goimagehash.ImageHash) (distance int, matches b
 	return distance, distance < 10, nil
 }
 
-func (b *BayanBot) comparePictureMatchFilter(dHash *goimagehash.ImageHash, excludedMessageID int) func(*storage.MessagePicture) (int, bool, error) {
+func (b *bayanBot) comparePictureMatchFilter(dHash *goimagehash.ImageHash, excludedMessageID int) func(*storage.MessagePicture) (int, bool, error) {
 	return func(msg *storage.MessagePicture) (dist int, ok bool, err error) {
 		if msg.ID == excludedMessageID {
 			return 0, false, nil
@@ -210,7 +208,7 @@ func (b *BayanBot) comparePictureMatchFilter(dHash *goimagehash.ImageHash, exclu
 	}
 }
 
-func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models.Message, pic models.PhotoSize) error {
+func (b *bayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models.Message, pic models.PhotoSize) error {
 	pHash, dHash, err := b.hashPicture(ctx, api, pic)
 	if err != nil {
 		return fmt.Errorf("failed to hash pictures: %w", err)
@@ -246,7 +244,7 @@ func (b *BayanBot) processPicture(ctx context.Context, api *bot.Bot, msg *models
 	return nil
 }
 
-func (b *BayanBot) replyBayan(ctx context.Context, api *bot.Bot, msg *models.Message, similar *storage.SimilarMessage) error {
+func (b *bayanBot) replyBayan(ctx context.Context, api *bot.Bot, msg *models.Message, similar *storage.SimilarMessage) error {
 	chatID := (similar.Msg.ChatID + 1000000000000) * -1
 	var text string
 	if b.showSimilarity {
@@ -268,7 +266,7 @@ func (b *BayanBot) replyBayan(ctx context.Context, api *bot.Bot, msg *models.Mes
 	return nil
 }
 
-func (b *BayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models.Message, pic models.PhotoSize) error {
+func (b *bayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models.Message, pic models.PhotoSize) error {
 	_, dHash, err := b.hashPicture(ctx, api, pic)
 	if err != nil {
 		return fmt.Errorf("failed to hash pictures: %w", err)
@@ -303,7 +301,7 @@ func (b *BayanBot) comparePicture(ctx context.Context, api *bot.Bot, msg *models
 	return nil
 }
 
-func (b *BayanBot) compareCmd(ctx context.Context, api *bot.Bot, update *models.Update) {
+func (b *bayanBot) compareCmd(ctx context.Context, api *bot.Bot, update *models.Update) {
 	if update.Message.ReplyToMessage == nil {
 		_, err := api.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID:          update.Message.Chat.ID,
@@ -343,7 +341,7 @@ func (b *BayanBot) compareCmd(ctx context.Context, api *bot.Bot, update *models.
 	}
 }
 
-func (b *BayanBot) replySimilar(ctx context.Context, api *bot.Bot, msg *models.Message, similar []*storage.SimilarMessage) error {
+func (b *bayanBot) replySimilar(ctx context.Context, api *bot.Bot, msg *models.Message, similar []*storage.SimilarMessage) error {
 	var text strings.Builder
 	text.WriteString("Что-то похожее:\n")
 	for _, s := range similar {
@@ -392,7 +390,7 @@ func hashPicFile(path string) (pHash, dHash *goimagehash.ImageHash, err error) {
 	return pHash, dHash, nil
 }
 
-func (b *BayanBot) hashVideo(ctx context.Context, api *bot.Bot, video *models.Video) (pHashes, dHashes *storage.VideoHashes, err error) {
+func (b *bayanBot) hashVideo(ctx context.Context, api *bot.Bot, video *models.Video) (pHashes, dHashes *storage.VideoHashes, err error) {
 	var framesPHashes, framesDHashes *storage.VideoHashes
 	processFrames := func(dirName string, files []os.DirEntry) error {
 		var hashErr error
@@ -437,7 +435,7 @@ func saveVideoFile(file io.ReadCloser, dirName string, video *models.Video) (fil
 	return fileName, nil
 }
 
-func (b *BayanBot) withVideoFrames(ctx context.Context, api *bot.Bot, video *models.Video, process func(string, []os.DirEntry) error) (err error) {
+func (b *bayanBot) withVideoFrames(ctx context.Context, api *bot.Bot, video *models.Video, process func(string, []os.DirEntry) error) (err error) {
 	file, err := b.downloadFile(ctx, api, video.FileID)
 	if err != nil {
 		return fmt.Errorf("failed to download file: %w", err)
@@ -511,7 +509,7 @@ func averageVideoHashDistance(left, right *storage.VideoHashes) (int, error) {
 	return distance / 4, nil
 }
 
-func (b *BayanBot) processVideoMatchFilter(hashes *storage.VideoHashes) func(*storage.MessageVideo) (int, bool, error) {
+func (b *bayanBot) processVideoMatchFilter(hashes *storage.VideoHashes) func(*storage.MessageVideo) (int, bool, error) {
 	return func(msg *storage.MessageVideo) (int, bool, error) {
 		distance, err := averageVideoHashDistance(hashes, &msg.PHashes)
 		if err != nil {
@@ -525,7 +523,7 @@ func (b *BayanBot) processVideoMatchFilter(hashes *storage.VideoHashes) func(*st
 	}
 }
 
-func (b *BayanBot) compareVideoMatchFilter(hashes *storage.VideoHashes, excludedMessageID int) func(*storage.MessageVideo) (int, bool, error) {
+func (b *bayanBot) compareVideoMatchFilter(hashes *storage.VideoHashes, excludedMessageID int) func(*storage.MessageVideo) (int, bool, error) {
 	return func(msg *storage.MessageVideo) (int, bool, error) {
 		if msg.Msg.ID == excludedMessageID {
 			return 0, false, nil
@@ -542,7 +540,7 @@ func (b *BayanBot) compareVideoMatchFilter(hashes *storage.VideoHashes, excluded
 	}
 }
 
-func (b *BayanBot) saveVideoMatch(ctx context.Context, api *bot.Bot, message *models.Message, similar []*storage.SimilarMessage) error {
+func (b *bayanBot) saveVideoMatch(ctx context.Context, api *bot.Bot, message *models.Message, similar []*storage.SimilarMessage) error {
 	if len(similar) == 0 {
 		return nil
 	}
@@ -560,7 +558,7 @@ func (b *BayanBot) saveVideoMatch(ctx context.Context, api *bot.Bot, message *mo
 	return nil
 }
 
-func (b *BayanBot) replyVideoComparison(ctx context.Context, api *bot.Bot, message *models.Message, similar []*storage.SimilarMessage) error {
+func (b *bayanBot) replyVideoComparison(ctx context.Context, api *bot.Bot, message *models.Message, similar []*storage.SimilarMessage) error {
 	if len(similar) > 0 {
 		err := b.replySimilar(ctx, api, message, similar)
 		if err != nil {
@@ -621,7 +619,7 @@ func hashFrames(dirName string, files []os.DirEntry) (framesPHashes, framesDHash
 	return framesPHashes, framesDHashes, nil
 }
 
-func (b *BayanBot) processVideo(ctx context.Context, api *bot.Bot, message *models.Message) error {
+func (b *bayanBot) processVideo(ctx context.Context, api *bot.Bot, message *models.Message) error {
 	if message.Video.FileSize > 20*1024*1024 {
 		if err := b.processVideoThumbnail(ctx, api, message); err != nil {
 			return fmt.Errorf("failed to process video thumbnail: %w", err)
@@ -656,7 +654,7 @@ func (b *BayanBot) processVideo(ctx context.Context, api *bot.Bot, message *mode
 	return nil
 }
 
-func (b *BayanBot) compareVideo(ctx context.Context, api *bot.Bot, message *models.Message) error {
+func (b *bayanBot) compareVideo(ctx context.Context, api *bot.Bot, message *models.Message) error {
 	video := message.ReplyToMessage.Video
 	if message.ReplyToMessage.Video.FileSize > 20*1024*1024 {
 		if err := b.processVideoThumbnail(ctx, api, message); err != nil {
@@ -687,7 +685,7 @@ func (b *BayanBot) compareVideo(ctx context.Context, api *bot.Bot, message *mode
 	return nil
 }
 
-func (b *BayanBot) processVideoThumbnail(ctx context.Context, api *bot.Bot, msg *models.Message) error {
+func (b *bayanBot) processVideoThumbnail(ctx context.Context, api *bot.Bot, msg *models.Message) error {
 	// TODO: Check if thumbnail is mostly black
 
 	pHash, dHash, err := b.hashPicture(ctx, api, *msg.Video.Thumbnail)
@@ -725,53 +723,19 @@ func (b *BayanBot) processVideoThumbnail(ctx context.Context, api *bot.Bot, msg 
 	return nil
 }
 
-type Environment struct {
-	TelegramToken  string  `env:"BOT_TOKEN,required"`
-	KekReplyChance float64 `env:"KEK_REPLY_CHANCE" envDefault:"0.3"`
-	ShowSimilarity bool    `env:"SHOW_SIMILARITY" envDefault:"false"`
-}
-
-func main() {
-	logger, err := zap.NewProduction()
-	if err != nil {
-		panic(err)
-	}
-
-	var config Environment
-	_, err = env.UnmarshalFromEnviron(&config)
-	if err != nil {
-		logger.Fatal("failed to unmarshal environment", zap.Error(err))
-	}
-
-	store, err := storage.New("bayan.db")
-	if err != nil {
-		logger.Fatal("failed to create storage", zap.Error(err))
-	}
-
-	botConfig := BayanConfig{
-		kekReplyChance: config.KekReplyChance,
-		showSimilarity: config.ShowSimilarity,
-	}
-	bayanBot := NewBayanBot(
-		config.TelegramToken,
-		store,
-		logger,
-		botConfig,
-	)
-
+func Run(ctx context.Context, token string, store *storage.Storage, logger *zap.Logger, config Config) error {
+	bayanBot := newBayanBot(token, store, logger, config)
 	opts := []bot.Option{
 		bot.WithDefaultHandler(bayanBot.processMessage),
 		bot.WithMessageTextHandler("/start", bot.MatchTypePrefix, bayanBot.startCmd),
 		bot.WithMessageTextHandler("/compare", bot.MatchTypePrefix, bayanBot.compareCmd),
 	}
 
-	b, err := bot.New(config.TelegramToken, opts...)
+	b, err := bot.New(token, opts...)
 	if err != nil {
-		logger.Fatal("failed to create bot", zap.Error(err))
+		return fmt.Errorf("create bot: %w", err)
 	}
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
-
 	b.Start(ctx)
+	return nil
 }
