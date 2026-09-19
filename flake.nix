@@ -20,7 +20,7 @@
           pname = "bayan";
           version = "0.1.0";
           src = ./.;
-          vendorHash = "sha256-WdMazid0J2+k17BqVQQyjjVQ0+0nJ3tW4e0WnbMlaL4=";
+          vendorHash = "sha256-xmunloo879R+BJHcbHOSoWgU9dCc0esDSGj5/QqSzao=";
           subPackages = [ "cmd/bayan" ];
           ldflags = [
             "-s"
