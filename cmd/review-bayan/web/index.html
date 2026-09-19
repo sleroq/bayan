@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bayan review</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div><strong>Bayan review</strong> <span id="progress">Loading…</span></div>
+  <div class="filters">
+    <select id="status" aria-label="Review status"><option value="all">All</option><option value="unreviewed">Unreviewed</option><option value="reviewed">Reviewed</option></select>
+    <select id="kind" aria-label="Media type"><option value="all">All media</option><option value="photo">Photos</option><option value="video">Videos</option><option value="mixed">Mixed</option></select>
+    <button id="export">Export reviews</button><button id="copy">Copy agent brief</button>
+  </div>
+</header>
+<aside class="shortcuts"><kbd>G</kbd>/<kbd>1</kbd> duplicate · <kbd>B</kbd>/<kbd>2</kbd> false positive · <kbd>C</kbd>/<kbd>3</kbd> complex · <kbd>J</kbd>/<kbd>↓</kbd> next · <kbd>K</kbd>/<kbd>↑</kbd> previous · <kbd>Enter</kbd> save note</aside>
+<main id="cases"></main><div id="sentinel"></div>
+<template id="card"><article><div class="meta"></div><div class="pair"></div><div class="actions">
+  <button data-class="duplicate">Good · duplicate</button><button data-class="distinct">Bad · false positive</button><button data-class="same-template">Complex · same template</button>
+  <textarea rows="2" placeholder="Note (template differences, context…)" aria-label="Review note"></textarea>
+</div></article></template>
+<script src="app.js"></script>
+</body></html>

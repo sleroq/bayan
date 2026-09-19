@@ -24,3 +24,15 @@ Acting as your friendly neighborhood duplicate detective, Bayan checks every new
 1. `cp scripts/env.bash.example scripts/env.bash`
 2. Fill in the blanks in `scripts/env.bash`
 3. Start bot with `./scripts/run.bash`
+
+## Review Telegram export detections
+
+The local review app scans a Telegram Desktop export without loading the full JSON into memory:
+
+```sh
+go run ./cmd/review-bayan -backup 'path/to/export'
+```
+
+Open <http://127.0.0.1:8790>, compare each original/current media pair, and classify it as **good / duplicate**, **bad / false positive**, or **complex / same template**. Use the note field for meaningful differences, then filter reviewed or unreviewed cases as needed.
+
+Reviews are stored only in that browser's `localStorage`; they do not modify the Telegram export. Use **Export reviews** to download the reviewed records as JSON, or **Copy agent brief** to put a concise list of links and classifications on the clipboard.

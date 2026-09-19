@@ -159,12 +159,12 @@ func (b *BayanBot) hashPicture(ctx context.Context, api *bot.Bot, pic models.Pho
 
 func (b *BayanBot) pictureMatchFilter(pHash *goimagehash.ImageHash) func(*storage.MessagePicture) (int, bool, error) {
 	return func(msg *storage.MessagePicture) (dist int, ok bool, err error) {
-		dist, err = pHash.Distance(msg.PHash)
+		dist, ok, err = pictureMatches(pHash, msg.PHash)
 		if err != nil {
 			return 0, false, fmt.Errorf("failed to get distance: %w", err)
 		}
 
-		if dist < 10 {
+		if ok {
 			b.logger.Debug(
 				"found similar message",
 				zap.Int("distance", dist),
@@ -175,6 +175,15 @@ func (b *BayanBot) pictureMatchFilter(pHash *goimagehash.ImageHash) func(*storag
 
 		return dist, false, nil
 	}
+}
+
+func pictureMatches(left, right *goimagehash.ImageHash) (distance int, matches bool, err error) {
+	distance, err = left.Distance(right)
+	if err != nil {
+		return 0, false, err
+	}
+
+	return distance, distance < 10, nil
 }
 
 func (b *BayanBot) comparePictureMatchFilter(dHash *goimagehash.ImageHash, excludedMessageID int) func(*storage.MessagePicture) (int, bool, error) {
@@ -354,11 +363,16 @@ func (b *BayanBot) replySimilar(ctx context.Context, api *bot.Bot, msg *models.M
 	return nil
 }
 
-func hashPicFile(path string) (dHash, pHash *goimagehash.ImageHash, err error) {
+func hashPicFile(path string) (pHash, dHash *goimagehash.ImageHash, err error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open file: %w", err)
 	}
+	defer func() {
+		if closeErr := file.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("failed to close file: %w", closeErr)
+		}
+	}()
 
 	img, err := jpeg.Decode(file)
 	if err != nil {
