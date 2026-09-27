@@ -20,7 +20,9 @@ jobs:
 
       - name: Build Bayan
         id: build
-        run: echo "path=$(nix build .#packages.x86_64-linux.bayan --no-link --print-out-paths)" >> "$GITHUB_OUTPUT"
+        run: |
+          path=$(nix build .#packages.x86_64-linux.bayan --no-link --print-out-paths)
+          echo "path=$path" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Attic
         env:
