@@ -5,8 +5,8 @@ go 1.26
 require (
 	github.com/Netflix/go-env v0.1.2
 	github.com/corona10/goimagehash v1.1.0
-	github.com/go-telegram/bot v1.23.0
-	github.com/mattn/go-sqlite3 v1.14.49
+	github.com/go-telegram/bot v1.27.0
+	github.com/mattn/go-sqlite3 v1.14.53
 	go.uber.org/zap v1.28.0
 )
 
